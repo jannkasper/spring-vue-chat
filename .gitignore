@@ -1,0 +1,56 @@
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+
+# Logs
+logs/
+*.log
+
+# Compiled class files
+*.class
+
+# Maven / Gradle
+.mvn/
+.gradle/
+!gradle-wrapper.jar
+build/
+target/
+
+# Dependency directories
+node_modules/
+
+# Vue / Vite
+.vite/
+dist/
+
+# Environment variables
+.env
+.env.local
+
+# macOS & Linux
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# JetBrains
+*.ipr
+*.iws
+out/
+
+# Coverage and test results
+coverage/
+*.coverage
+
+# IDE Settings
+/.idea/**/workspace.xml
+/.idea/**/tasks.xml
+/.idea/**/usage.statistics.xml
+/.idea/**/shelf/
+
+# Local settings
+.vscode/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
