@@ -24,19 +24,45 @@ export const authApi = {
 // Chat Rooms API calls
 export const chatRoomApi = {
   getAllChatRooms() {
-    return apiClient.get('/api/chatrooms')
+    return apiClient.get('/api/chats')
   },
   
-  createChatRoom(name: string) {
-    return apiClient.post('/api/chatrooms', { name })
+  createChatRoom(data: { name: string, isPrivate: boolean }) {
+    return apiClient.post('/api/chats', data)
   },
   
-  getChatRoomById(id: number) {
-    return apiClient.get(`/api/chatrooms/${id}`)
+  getChatRoomById(id: string) {
+    return apiClient.get(`/api/chats/${id}`)
   },
   
-  deleteChatRoom(id: number) {
-    return apiClient.delete(`/api/chatrooms/${id}`)
+  joinChatRoom(chatRoomId: string, userId: string) {
+    return apiClient.post(`/api/chats/${chatRoomId}/join`, { userId })
+  },
+  
+  removeMemberFromChatRoom(chatRoomId: string, userId: string) {
+    return apiClient.delete(`/api/chats/${chatRoomId}/members/${userId}`)
+  },
+  
+  // Message APIs
+  getChatMessages(chatRoomId: string) {
+    return apiClient.get(`/api/chats/${chatRoomId}/messages`)
+  },
+  
+  getChatMessagesPaginated(chatRoomId: string, page = 0, size = 20) {
+    return apiClient.get(`/api/chats/${chatRoomId}/messages/paginated?page=${page}&size=${size}`)
+  },
+  
+  sendMessage(chatRoomId: string, data: { 
+    senderId: string, 
+    message: string,
+    fileUrl?: string,
+    encrypted?: boolean 
+  }) {
+    return apiClient.post(`/api/chats/${chatRoomId}/messages`, data)
+  },
+  
+  searchMessages(chatRoomId: string, query: string, page = 0, size = 20) {
+    return apiClient.get(`/api/chats/${chatRoomId}/messages/search?query=${query}&page=${page}&size=${size}`)
   }
 }
 
