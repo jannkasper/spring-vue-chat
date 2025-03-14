@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { LogOut, MessageCircle, Plus } from 'lucide-vue-next'
 import ChatList from '@/components/ChatList.vue'
+import PublicChatList from '@/components/PublicChatList.vue'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const router = useRouter()
 
@@ -16,6 +18,7 @@ const chatRoomStore = useChatRoomStore()
 const newRoomName = ref('')
 const isCreatingRoom = ref(false)
 const createRoomError = ref('')
+const activeTab = ref('my-chats')
 
 onMounted(async () => {
   await chatRoomStore.fetchChatRooms()
@@ -90,9 +93,22 @@ const formatDate = (dateString: string) => {
           </CardContent>
         </Card>
         
-        <!-- Chat Rooms List -->
+        <!-- Chat Rooms List with Tabs -->
         <div class="md:col-span-2">
-          <ChatList title="Your Chat Rooms" description="Select a room to start chatting" />
+          <Tabs v-model="activeTab" default-value="my-chats" class="w-full">
+            <TabsList class="grid w-full grid-cols-2">
+              <TabsTrigger value="my-chats">My Chat Rooms</TabsTrigger>
+              <TabsTrigger value="public-chats">Public Chat Rooms</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="my-chats">
+              <ChatList title="Your Chat Rooms" description="Select a room to start chatting" />
+            </TabsContent>
+            
+            <TabsContent value="public-chats">
+              <PublicChatList title="Public Chat Rooms" description="Discover and join public chat rooms" />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </main>

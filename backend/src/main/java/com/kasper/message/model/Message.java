@@ -45,7 +45,7 @@ public class Message {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
     
-    // For full-text search
-    @Column(name = "search_vector", columnDefinition = "tsvector")
+    // For full-text search - managed by database trigger
+    @Column(name = "search_vector", columnDefinition = "tsvector", insertable = false, updatable = false)
     private String searchVector;
 }

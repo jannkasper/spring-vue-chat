@@ -2,6 +2,8 @@ package com.kasper.chat.repository;
 
 import com.kasper.chat.model.ChatRoom;
 import com.kasper.user.model.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,4 +27,7 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, UUID> {
     @Query("SELECT CASE WHEN COUNT(cr) > 0 THEN true ELSE false END FROM ChatRoom cr JOIN cr.members m " +
            "WHERE cr.id = :chatRoomId AND m.user.id = :userId AND m.isAdmin = true")
     boolean isUserAdminOfChatRoom(@Param("userId") UUID userId, @Param("chatRoomId") UUID chatRoomId);
+    
+    // Find all public chat rooms (isPrivate = false)
+    Page<ChatRoom> findByIsPrivateFalseOrderByCreatedAtDesc(Pageable pageable);
 }

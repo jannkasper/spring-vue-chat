@@ -27,6 +27,10 @@ export const chatRoomApi = {
     return apiClient.get('/api/chats')
   },
   
+  getPublicChatRooms(page = 0, size = 10) {
+    return apiClient.get(`/api/chats/public?page=${page}&size=${size}`)
+  },
+  
   createChatRoom(data: { name: string, isPrivate: boolean }) {
     return apiClient.post('/api/chats', data)
   },
@@ -37,6 +41,10 @@ export const chatRoomApi = {
   
   joinChatRoom(chatRoomId: string, userId: string) {
     return apiClient.post(`/api/chats/${chatRoomId}/join`, { userId })
+  },
+  
+  joinPublicChatRoom(chatRoomId: string) {
+    return apiClient.post(`/api/chats/${chatRoomId}/join-public`)
   },
   
   removeMemberFromChatRoom(chatRoomId: string, userId: string) {

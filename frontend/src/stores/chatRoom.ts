@@ -28,10 +28,29 @@ export interface Message {
   encrypted: boolean
 }
 
+export interface PageResponse<T> {
+  content: T[]
+  totalPages: number
+  totalElements: number
+  size: number
+  number: number // current page
+  first: boolean
+  last: boolean
+  empty: boolean
+}
+
 export const useChatRoomStore = defineStore('chatRoom', () => {
   const chatRooms = ref<ChatRoom[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+
+  // Public chat rooms state
+  const publicChatRooms = ref<ChatRoom[]>([])
+  const publicChatRoomsPage = ref(0)
+  const publicChatRoomsSize = ref(10)
+  const publicChatRoomsTotalPages = ref(0)
+  const publicChatRoomsLoading = ref(false)
+  const publicChatRoomsError = ref<string | null>(null)
 
   const fetchChatRooms = async () => {
     loading.value = true
@@ -128,6 +147,46 @@ export const useChatRoomStore = defineStore('chatRoom', () => {
     messages.value.push(message)
   }
 
+  const fetchPublicChatRooms = async (page = 0, size = 10) => {
+    publicChatRoomsLoading.value = true
+    publicChatRoomsError.value = null
+    
+    try {
+      const response = await chatRoomApi.getPublicChatRooms(page, size)
+      const pageData = response.data as PageResponse<ChatRoom>
+      
+      publicChatRooms.value = pageData.content
+      publicChatRoomsPage.value = pageData.number
+      publicChatRoomsSize.value = pageData.size
+      publicChatRoomsTotalPages.value = pageData.totalPages
+      
+      return pageData
+    } catch (err: any) {
+      console.error('Failed to fetch public chat rooms:', err)
+      publicChatRoomsError.value = err.response?.data?.message || 'Failed to load public chat rooms.'
+      throw publicChatRoomsError.value
+    } finally {
+      publicChatRoomsLoading.value = false
+    }
+  }
+
+  const joinPublicChatRoom = async (chatRoomId: string) => {
+    loading.value = true
+    error.value = null
+    
+    try {
+      const response = await chatRoomApi.joinPublicChatRoom(chatRoomId)
+      currentChatRoom.value = response.data
+      return response.data
+    } catch (err: any) {
+      console.error('Failed to join public chat room:', err)
+      error.value = err.response?.data?.message || 'Failed to join chat room.'
+      throw error.value
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     // Chat rooms
     chatRooms,
@@ -137,6 +196,16 @@ export const useChatRoomStore = defineStore('chatRoom', () => {
     createChatRoom,
     getChatRoom,
     currentChatRoom,
+    joinPublicChatRoom,
+    
+    // Public chat rooms
+    publicChatRooms,
+    publicChatRoomsPage,
+    publicChatRoomsSize,
+    publicChatRoomsTotalPages,
+    publicChatRoomsLoading,
+    publicChatRoomsError,
+    fetchPublicChatRooms,
     
     // Messages
     messages,

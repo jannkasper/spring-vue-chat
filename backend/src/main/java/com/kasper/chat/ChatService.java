@@ -10,6 +10,8 @@ import com.kasper.user.model.User;
 import com.kasper.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -121,6 +123,59 @@ public class ChatService {
     
     public boolean isUserAdmin(UUID userId, UUID chatRoomId) {
         return chatRoomRepository.isUserAdminOfChatRoom(userId, chatRoomId);
+    }
+    
+    /**
+     * Get a paginated list of public chat rooms
+     */
+    public Page<ChatRoomResponse> getPublicChatRooms(Pageable pageable) {
+        Page<ChatRoom> publicChats = chatRoomRepository.findByIsPrivateFalseOrderByCreatedAtDesc(pageable);
+        
+        return publicChats.map(chatRoom -> {
+            int memberCount = chatRoomMemberRepository.findByChatRoom(chatRoom).size();
+            return mapToChatRoomResponse(chatRoom, memberCount);
+        });
+    }
+    
+    /**
+     * Join a public chat room automatically
+     * 
+     * @param chatRoomId ID of the chat room to join
+     * @param userId ID of the user joining the chat
+     * @return ChatRoomResponse with chat room details
+     * @throws IllegalStateException if the chat room is private
+     */
+    @Transactional
+    public ChatRoomResponse joinPublicChatRoom(UUID chatRoomId, UUID userId) {
+        ChatRoom chatRoom = chatRoomRepository.findById(chatRoomId)
+                .orElseThrow(() -> new EntityNotFoundException("Chat room not found with ID: " + chatRoomId));
+        
+        // Check if the chat room is public
+        if (chatRoom.isPrivate()) {
+            throw new IllegalStateException("Cannot automatically join a private chat room");
+        }
+        
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("User not found with ID: " + userId));
+        
+        // Check if user is already a member
+        if (chatRoomMemberRepository.existsByChatRoomAndUser(chatRoom, user)) {
+            // User is already a member, just return the chat room
+            int memberCount = chatRoomMemberRepository.findByChatRoom(chatRoom).size();
+            return mapToChatRoomResponse(chatRoom, memberCount);
+        }
+        
+        // Add user as a regular member
+        ChatRoomMember membership = ChatRoomMember.builder()
+                .chatRoom(chatRoom)
+                .user(user)
+                .isAdmin(false)
+                .build();
+        
+        chatRoomMemberRepository.save(membership);
+        
+        int memberCount = chatRoomMemberRepository.findByChatRoom(chatRoom).size();
+        return mapToChatRoomResponse(chatRoom, memberCount);
     }
     
     private ChatRoomResponse mapToChatRoomResponse(ChatRoom chatRoom, int memberCount) {
