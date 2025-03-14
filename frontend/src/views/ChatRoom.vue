@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, computed, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useChatRoomStore, type Message } from '@/stores/chatRoom'
@@ -22,13 +22,25 @@ const message = ref('')
 const isSubmitting = ref(false)
 const error = ref('')
 const messagesEndRef = ref<HTMLDivElement | null>(null)
+const messageContainerRef = ref<HTMLDivElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const fileUploadStatus = ref<'idle' | 'uploading' | 'success' | 'error'>('idle')
+const isNearBottom = ref(true)
 
 // Check for authentication
 if (!authStore.isAuthenticated || !authStore.user) {
   router.push('/signin')
+}
+
+// Function to check if user is near bottom of chat
+const checkIfNearBottom = () => {
+  if (messageContainerRef.value) {
+    const { scrollTop, scrollHeight, clientHeight } = messageContainerRef.value
+    // Consider "near bottom" if within 100px of the bottom
+    const scrollPosition = scrollHeight - scrollTop - clientHeight
+    isNearBottom.value = scrollPosition < 100
+  }
 }
 
 // Load chat room and messages
@@ -47,6 +59,11 @@ onMounted(async () => {
     
     // Scroll to bottom of messages
     scrollToBottom()
+
+    // Set up scroll event listener
+    if (messageContainerRef.value) {
+      messageContainerRef.value.addEventListener('scroll', checkIfNearBottom)
+    }
   } catch (err) {
     console.error('Error loading chat room:', err)
     error.value = 'Failed to load chat room'
@@ -56,6 +73,10 @@ onMounted(async () => {
 // Cleanup on component unmount
 onBeforeUnmount(() => {
   webSocketService.close()
+  // Remove scroll event listener
+  if (messageContainerRef.value) {
+    messageContainerRef.value.removeEventListener('scroll', checkIfNearBottom)
+  }
 })
 
 // Format date for display
@@ -91,7 +112,7 @@ const groupedMessages = computed(() => {
 
 // Check if the message is from the current user
 const isCurrentUser = (senderId: string) => {
-  return authStore.user?.id === senderId
+  return authStore.user?.id?.toString() === senderId
 }
 
 // Scroll to bottom of messages
@@ -102,6 +123,14 @@ const scrollToBottom = () => {
     }
   })
 }
+
+// Watch for new messages and scroll to bottom if user is near bottom
+watch(() => chatRoomStore.messages.length, (newLength: number, oldLength: number) => {
+  if (newLength > oldLength && isNearBottom.value) {
+    // Only scroll to bottom if we're already near the bottom
+    scrollToBottom()
+  }
+})
 
 // Send message
 const sendChatMessage = async () => {
@@ -128,7 +157,7 @@ const sendChatMessage = async () => {
     
     // Send message via API
     await chatRoomStore.sendMessage(chatRoomId.value, {
-      senderId: authStore.user.id,
+      senderId: authStore.user.id.toString(),
       message: message.value,
       fileUrl,
       encrypted: false
@@ -213,8 +242,8 @@ const navigateBack = () => {
       </div>
     </header>
     
-    <!-- Main Content -->
-    <main class="flex-1 container mx-auto px-4 py-4 flex flex-col overflow-hidden">
+    <!-- Main Content - Add pb-20 to create space for the fixed footer -->
+    <main class="flex-1 container mx-auto px-4 py-4 flex flex-col overflow-hidden pb-24">
       <!-- Loading State -->
       <div v-if="chatRoomStore.messagesLoading" class="flex-1 flex items-center justify-center">
         <div class="text-center">
@@ -239,7 +268,11 @@ const navigateBack = () => {
       </div>
       
       <!-- Messages -->
-      <div v-else class="flex-1 overflow-y-auto pb-4 space-y-6">
+      <div 
+        v-else 
+        class="flex-1 overflow-y-auto pb-4 space-y-6"
+        ref="messageContainerRef"
+      >
         <div v-for="(messages, date) in groupedMessages" :key="date">
           <!-- Date Separator -->
           <div class="text-center my-4">
@@ -304,9 +337,11 @@ const navigateBack = () => {
         <!-- Scroll anchor -->
         <div ref="messagesEndRef"></div>
       </div>
+    </main>
       
-      <!-- Message input -->
-      <div class="mt-4 bg-white dark:bg-gray-800 rounded-lg shadow p-3">
+    <!-- Message input - Fixed at bottom -->
+    <div class="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 shadow-lg border-t border-gray-200 dark:border-gray-700 z-10">
+      <div class="container mx-auto px-4 py-3">
         <!-- Selected file preview -->
         <div v-if="selectedFile" class="mb-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded flex items-center justify-between">
           <div class="flex items-center gap-2 text-sm">
@@ -367,7 +402,7 @@ const navigateBack = () => {
           </Button>
         </div>
       </div>
-    </main>
+    </div>
   </div>
 </template>
 

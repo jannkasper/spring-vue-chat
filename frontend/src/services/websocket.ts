@@ -1,5 +1,7 @@
 import { useChatRoomStore, type Message } from '@/stores/chatRoom'
 import { useAuthStore } from '@/stores/auth'
+import SockJS from 'sockjs-client'
+import { Client } from '@stomp/stompjs'
 
 // Define the WebSocket message type received from server
 interface WebSocketMessage {
@@ -9,11 +11,11 @@ interface WebSocketMessage {
   message: string
   fileUrl?: string
   createdAt: string
-  type: 'CHAT' | 'JOIN' | 'LEAVE' | 'TYPING'
+  type: 'CHAT' | 'JOIN' | 'LEAVE' | 'TYPING' | 'AUTH'
 }
 
 export class WebSocketService {
-  private socket: WebSocket | null = null
+  private stompClient: Client | null = null
   private chatRoomId: string | null = null
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
@@ -38,61 +40,84 @@ export class WebSocketService {
     try {
       // Get the base URL (without the port or protocol) - localhost or domain name
       const host = window.location.hostname
-      // Create WebSocket connection with SockJS (as configured on the backend)
-      // We use the backend port 8080 directly here
-      const sockjsUrl = `http://${host}:8080/ws?token=${token}`
       
-      // Using native WebSocket as a fallback, but ideally you should use SockJS or a WebSocket client library
-      this.socket = new WebSocket(`ws://${host}:8080/ws/chat/${chatRoomId}`)
+      // Create a STOMP client over SockJS
+      this.stompClient = new Client({
+        webSocketFactory: () => new SockJS(`http://${host}:8080/ws`),
+        connectHeaders: {
+          'Authorization': `Bearer ${token}`
+        },
+        debug: function(str) {
+          console.log(str);
+        },
+        reconnectDelay: 5000,
+        heartbeatIncoming: 4000,
+        heartbeatOutgoing: 4000
+      });
       
-      // Connection opened
-      this.socket.addEventListener('open', (event) => {
-        console.log('WebSocket connection established')
-        this.reconnectAttempts = 0 // Reset reconnect attempts on successful connection
+      // Connection opened handler
+      this.stompClient.onConnect = (frame) => {
+        console.log('WebSocket connection established');
+        this.reconnectAttempts = 0; // Reset reconnect attempts on successful connection
         
-        // Send authentication message
-        if (this.socket && token) {
-          this.socket.send(JSON.stringify({ 
-            type: 'AUTH', 
-            token,
-            chatRoomId: this.chatRoomId
-          }))
-        }
-      })
-      
-      // Listen for messages
-      this.socket.addEventListener('message', (event) => {
-        try {
-          const data: WebSocketMessage = JSON.parse(event.data)
-          this.handleMessage(data)
-        } catch (err) {
-          console.error('Error parsing WebSocket message:', err)
-        }
-      })
-      
-      // Connection closed
-      this.socket.addEventListener('close', (event) => {
-        console.log('WebSocket connection closed:', event.code, event.reason)
-        this.attemptReconnect()
-      })
+        // Subscribe to the chat room topic
+        this.stompClient?.subscribe(`/topic/chat/${chatRoomId}`, (message) => {
+          try {
+            const data: WebSocketMessage = JSON.parse(message.body);
+            this.handleMessage(data);
+          } catch (err) {
+            console.error('Error parsing WebSocket message:', err);
+          }
+        });
+
+        // Subscribe to typing notifications
+        this.stompClient?.subscribe(`/topic/chat/${chatRoomId}/typing`, (message) => {
+          try {
+            const data: WebSocketMessage = JSON.parse(message.body);
+            this.handleMessage(data);
+          } catch (err) {
+            console.error('Error parsing WebSocket message:', err);
+          }
+        });
+      };
       
       // Error handling
-      this.socket.addEventListener('error', (event) => {
-        console.error('WebSocket error:', event)
-        this.close()
-        this.attemptReconnect()
-      })
+      this.stompClient.onStompError = (frame) => {
+        console.error('STOMP error:', frame.headers['message'], frame.body);
+      };
+      
+      this.stompClient.onWebSocketError = (event) => {
+        console.error('WebSocket error:', event);
+        this.attemptReconnect();
+      };
+      
+      this.stompClient.onWebSocketClose = (event) => {
+        console.log('WebSocket connection closed:', event.code, event.reason);
+        this.attemptReconnect();
+      };
+      
+      // Activate the connection
+      this.stompClient.activate();
+      
     } catch (err) {
-      console.error('Failed to create WebSocket connection:', err)
+      console.error('Failed to create WebSocket connection:', err);
     }
   }
   
   private handleMessage(data: WebSocketMessage) {
     const chatRoomStore = useChatRoomStore()
+    const authStore = useAuthStore()
     
     // Handle different message types
     switch (data.type) {
       case 'CHAT':
+        // Skip messages from the current user to avoid duplicates
+        // Since they're already added when the user sends them locally
+        if (authStore.user && data.senderId === authStore.user.id.toString()) {
+          console.log('Skipping message from current user as it was already added')
+          break
+        }
+        
         // Convert the WebSocket message to our Message type
         const message: Message = {
           id: crypto.randomUUID(), // Generate a temp ID if not provided
@@ -129,93 +154,99 @@ export class WebSocketService {
   }
   
   sendMessage(message: string, fileUrl?: string) {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      console.error('WebSocket is not connected')
-      return
+    if (!this.stompClient || !this.stompClient.connected) {
+      console.error('WebSocket is not connected');
+      return;
     }
     
-    const authStore = useAuthStore()
-    const user = authStore.user
+    const authStore = useAuthStore();
+    const user = authStore.user;
     
     if (!user || !this.chatRoomId) {
-      console.error('Cannot send message: Missing user or chat room ID')
-      return
+      console.error('Cannot send message: Missing user or chat room ID');
+      return;
     }
     
     // Create message object
     const messageObject: WebSocketMessage = {
-      chatRoomId: this.chatRoomId,
-      senderId: user.id,
+      chatRoomId: String(this.chatRoomId),
+      senderId: String(user.id),
       senderUsername: user.username,
       message,
       fileUrl,
       createdAt: new Date().toISOString(),
       type: 'CHAT'
-    }
+    };
     
     // Send the message
-    this.socket.send(JSON.stringify(messageObject))
+    this.stompClient.publish({
+      destination: `/app/chat/${this.chatRoomId}`,
+      body: JSON.stringify(messageObject)
+    });
   }
   
   sendTypingStatus() {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      return
+    if (!this.stompClient || !this.stompClient.connected) {
+      return;
     }
     
-    const authStore = useAuthStore()
-    const user = authStore.user
+    const authStore = useAuthStore();
+    const user = authStore.user;
     
     if (!user || !this.chatRoomId) {
-      return
+      return;
     }
     
     // Create typing indicator object
     const typingObject: WebSocketMessage = {
-      chatRoomId: this.chatRoomId,
-      senderId: user.id,
+      chatRoomId: String(this.chatRoomId),
+      senderId: String(user.id),
       senderUsername: user.username,
       message: '',
       createdAt: new Date().toISOString(),
       type: 'TYPING'
-    }
+    };
     
     // Send the typing indicator
-    this.socket.send(JSON.stringify(typingObject))
+    this.stompClient.publish({
+      destination: `/app/chat/${this.chatRoomId}/typing`,
+      body: JSON.stringify(typingObject)
+    });
   }
   
   private attemptReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Maximum reconnect attempts reached')
-      return
+      console.error('Maximum reconnect attempts reached');
+      return;
     }
     
-    this.reconnectAttempts++
+    this.reconnectAttempts++;
     
     // Exponential backoff for reconnect
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000)
-    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`)
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts})`);
     
     this.reconnectTimeout = setTimeout(() => {
       if (this.chatRoomId) {
-        this.connect(this.chatRoomId)
+        this.connect(this.chatRoomId);
       }
-    }, delay)
+    }, delay);
   }
   
   close() {
     // Clear any reconnect timeout
     if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout)
-      this.reconnectTimeout = null
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
     }
     
     // Close the WebSocket if it exists
-    if (this.socket) {
-      this.socket.close()
-      this.socket = null
+    if (this.stompClient) {
+      this.stompClient.deactivate();
+      this.stompClient = null;
     }
     
-    this.chatRoomId = null
+    this.chatRoomId = null;
   }
 }
 
