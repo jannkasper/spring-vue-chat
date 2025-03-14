@@ -43,7 +43,7 @@ export class WebSocketService {
       
       // Create a STOMP client over SockJS
       this.stompClient = new Client({
-        webSocketFactory: () => new SockJS(`http://${host}:8080/ws`),
+        webSocketFactory: () => new SockJS('/ws'),
         connectHeaders: {
           'Authorization': `Bearer ${token}`
         },

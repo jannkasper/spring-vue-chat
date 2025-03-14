@@ -2,8 +2,10 @@ import axios from 'axios'
 import router from '@/router'
 
 // Create axios instance
+// When baseURL is empty or relative, requests are sent to the current origin
+// which allows Nginx to proxy the requests to the backend
 const apiClient = axios.create({
-  baseURL: 'http://localhost:8080',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   headers: {
     'Content-Type': 'application/json'
   }

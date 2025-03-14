@@ -148,7 +148,7 @@ const sendChatMessage = async () => {
     error.value = ''
     
     // TODO: Handle file upload
-    let fileUrl = undefined
+    let fileUrl: string | undefined = undefined
     if (selectedFile.value) {
       // In a real implementation, you would upload the file to a server here
       // and get back a URL to the uploaded file

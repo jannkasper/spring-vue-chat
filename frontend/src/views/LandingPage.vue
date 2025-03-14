@@ -581,7 +581,7 @@ onMounted(() => {
           v-for="(plan, index) in pricingPlans" 
           :key="index"
           class="border border-gray-200 dark:border-gray-800 relative"
-          :class="{'border-blue-500 dark:border-blue-400 shadow-xl': plan.popular}"
+          :class="plan.popular ? 'border-blue-500 dark:border-blue-400 shadow-xl' : ''"
         >
           <div v-if="plan.popular" class="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold px-3 py-1 transform translate-x-2 -translate-y-2 rotate-12">
             Most Popular
@@ -606,7 +606,7 @@ onMounted(() => {
           </CardContent>
           
           <CardFooter>
-            <Button :variant="plan.variant" class="w-full font-medium">
+            <Button :variant="plan.variant as any" class="w-full font-medium">
               {{ plan.cta }}
             </Button>
           </CardFooter>
